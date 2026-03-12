@@ -3019,6 +3019,111 @@ function SettingsPage({ onRefresh }) {
           ))}
         </div>
       </div>
+
+      {/* Data Management */}
+      <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, padding: 20, marginBottom: 20 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "#fff", marginBottom: 6, letterSpacing: 0.5 }}>Data Management</div>
+        <div style={{ fontSize: 12, color: "#666", marginBottom: 16 }}>Export your data to transfer between devices, or import from another device. All data is stored locally in your browser.</div>
+
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {/* Export */}
+          <button style={styles.btn("primary")} onClick={() => {
+            const data = {
+              _export: "CaseVault",
+              _version: 1,
+              _exportedAt: new Date().toISOString(),
+              cases: CASES_DB,
+              caseCounter: CASE_COUNTER,
+              invoices: INVOICES_DB,
+              invoiceCounter: INVOICE_COUNTER,
+              clients: CLIENTS_DB,
+              clientCounter: CLIENT_COUNTER,
+              agents: AGENTS_DB,
+              agentCounter: AGENT_COUNTER,
+              auditLog: AUDIT_LOG,
+              auditCounter: AUDIT_COUNTER,
+              agencySettings: AGENCY_SETTINGS,
+            };
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `casevault-backup-${new Date().toISOString().split("T")[0]}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            logAuditEvent("EXPORT", null, { action: "Full data export" });
+          }}>
+            <Icon name="print" size={14} /> Export All Data
+          </button>
+
+          {/* Import */}
+          <button style={styles.btn()} onClick={() => {
+            const input = document.createElement("input");
+            input.type = "file";
+            input.accept = ".json";
+            input.onchange = (e) => {
+              const file = e.target.files[0];
+              if (!file) return;
+              const reader = new FileReader();
+              reader.onload = (ev) => {
+                try {
+                  const data = JSON.parse(ev.target.result);
+                  if (data._export !== "CaseVault") return alert("Invalid CaseVault backup file.");
+                  if (!confirm(`Import data from ${new Date(data._exportedAt).toLocaleString()}?\n\nThis will REPLACE all current data on this device.\n\n${data.cases?.length || 0} cases, ${data.clients?.length || 0} clients, ${data.agents?.length || 0} agents, ${data.invoices?.length || 0} invoices.`)) return;
+
+                  CASES_DB.length = 0; data.cases?.forEach((c) => CASES_DB.push(c));
+                  CASE_COUNTER = data.caseCounter || 1000;
+                  INVOICES_DB.length = 0; data.invoices?.forEach((i) => INVOICES_DB.push(i));
+                  INVOICE_COUNTER = data.invoiceCounter || 5000;
+                  CLIENTS_DB.length = 0; data.clients?.forEach((c) => CLIENTS_DB.push(c));
+                  CLIENT_COUNTER = data.clientCounter || 100;
+                  AGENTS_DB.length = 0; data.agents?.forEach((a) => AGENTS_DB.push(a));
+                  AGENT_COUNTER = data.agentCounter || 0;
+                  AUDIT_LOG.length = 0; data.auditLog?.forEach((a) => AUDIT_LOG.push(a));
+                  AUDIT_COUNTER = data.auditCounter || 0;
+                  if (data.agencySettings) Object.assign(AGENCY_SETTINGS, data.agencySettings);
+
+                  // Restore current user
+                  const owner = AGENTS_DB.find((a) => a.role === "owner") || AGENTS_DB[0];
+                  if (owner) setCurrentUser(owner);
+
+                  persistAll();
+                  logAuditEvent("LOGIN", null, { action: "Data imported from backup", source: file.name });
+                  onRefresh();
+                  setSettings({ ...AGENCY_SETTINGS });
+                  alert("Data imported successfully! The page will reload.");
+                  window.location.reload();
+                } catch (err) {
+                  alert("Error reading backup file: " + err.message);
+                }
+              };
+              reader.readAsText(file);
+            };
+            input.click();
+          }}>
+            <Icon name="upload" size={14} /> Import Data
+          </button>
+
+          {/* Reset */}
+          <button style={{ ...styles.btn(), borderColor: "rgba(255,68,68,0.3)", color: "#f44" }} onClick={() => {
+            if (!confirm("⚠ DELETE ALL DATA?\n\nThis will permanently erase all cases, clients, invoices, agents, and audit logs from this device.\n\nThis cannot be undone. Export your data first if you want to keep it.")) return;
+            if (!confirm("Are you absolutely sure? Type OK in the next prompt to confirm.")) return;
+            const check = prompt("Type DELETE to confirm:");
+            if (check !== "DELETE") return;
+            localStorage.clear();
+            window.location.reload();
+          }}>
+            <Icon name="trash" size={14} /> Reset All Data
+          </button>
+        </div>
+
+        <div style={{ marginTop: 14, padding: "10px 14px", background: "rgba(74,170,255,0.04)", border: "1px solid rgba(74,170,255,0.1)", borderRadius: 8 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: "#4af", marginBottom: 4 }}>Syncing Between Devices</div>
+          <div style={{ fontSize: 11, color: "#888", lineHeight: 1.5 }}>
+            Set up your accounts, clients, and rates on your laptop using the keyboard. Then hit Export, transfer the .json file to your phone (email it to yourself, AirDrop, etc.), and Import it on your phone. Your phone becomes your field device with all the data ready to go. Export from your phone when done to bring field data back.
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
