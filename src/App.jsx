@@ -2,6 +2,71 @@ import { useState, useEffect, useRef, useCallback } from "react";
 
 const FONTS = `
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@media (max-width: 768px) {
+  * { -webkit-tap-highlight-color: transparent; }
+  input, select, textarea, button { font-size: 16px !important; }
+
+  .cv-stats {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+  }
+  .cv-stats > * {
+    min-width: 0 !important;
+  }
+
+  .cv-tabs {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    flex-wrap: nowrap !important;
+    padding-bottom: 4px !important;
+    margin-left: -16px !important;
+    margin-right: -16px !important;
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+  .cv-tabs::-webkit-scrollbar { display: none; }
+  .cv-tabs > * { white-space: nowrap; flex-shrink: 0; }
+
+  .cv-grid2 {
+    grid-template-columns: 1fr !important;
+  }
+
+  .cv-grid3 {
+    grid-template-columns: 1fr !important;
+  }
+
+  .cv-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+  }
+
+  .cv-filters {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    flex-wrap: nowrap !important;
+    scrollbar-width: none !important;
+    padding-bottom: 4px !important;
+  }
+  .cv-filters::-webkit-scrollbar { display: none; }
+  .cv-filters > * { flex-shrink: 0; }
+
+  .cv-cascade {
+    flex-direction: column !important;
+  }
+
+  .cv-card-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+  .cv-card-row > div:last-child {
+    text-align: left !important;
+  }
+}
 `;
 
 // ─── Persistent Data Layer (localStorage) ───
@@ -380,16 +445,74 @@ const styles = {
     pointerEvents: "none",
     zIndex: 9999,
   },
-  sidebar: {
+  sidebar: (mobile, open) => ({
     position: "fixed",
-    left: 0, top: 0, bottom: 0,
-    width: 260,
+    left: mobile && !open ? -280 : 0,
+    top: 0, bottom: 0,
+    width: mobile ? 280 : 260,
     background: "linear-gradient(180deg, #0d0e14 0%, #0a0b0f 100%)",
     borderRight: "1px solid rgba(0,255,0,0.1)",
     display: "flex",
     flexDirection: "column",
-    zIndex: 100,
+    zIndex: mobile ? 200 : 100,
+    transition: "left 0.25s ease",
+    boxShadow: mobile && open ? "4px 0 30px rgba(0,0,0,0.8)" : "none",
+  }),
+  overlay: {
+    position: "fixed",
+    top: 0, left: 0, right: 0, bottom: 0,
+    background: "rgba(0,0,0,0.6)",
+    zIndex: 150,
+    backdropFilter: "blur(2px)",
   },
+  mobileHeader: {
+    position: "fixed",
+    top: 0, left: 0, right: 0,
+    height: 56,
+    background: "linear-gradient(180deg, #0d0e14 0%, #0a0b0f 100%)",
+    borderBottom: "1px solid rgba(0,255,0,0.1)",
+    display: "flex",
+    alignItems: "center",
+    padding: "0 16px",
+    zIndex: 100,
+    gap: 12,
+  },
+  hamburger: {
+    background: "none",
+    border: "none",
+    color: "#0f0",
+    fontSize: 22,
+    cursor: "pointer",
+    padding: "8px 4px",
+    lineHeight: 1,
+  },
+  bottomNav: {
+    position: "fixed",
+    bottom: 0, left: 0, right: 0,
+    height: 64,
+    background: "linear-gradient(0deg, #0d0e14 0%, rgba(13,14,20,0.98) 100%)",
+    borderTop: "1px solid rgba(0,255,0,0.1)",
+    display: "flex",
+    justifyContent: "space-around",
+    alignItems: "center",
+    zIndex: 100,
+    paddingBottom: "env(safe-area-inset-bottom, 0px)",
+  },
+  bottomNavItem: (active) => ({
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 2,
+    padding: "6px 12px",
+    cursor: "pointer",
+    color: active ? "#0f0" : "#666",
+    fontSize: 10,
+    fontWeight: active ? 600 : 400,
+    transition: "all 0.15s",
+    background: "none",
+    border: "none",
+    fontFamily: "'Outfit', sans-serif",
+  }),
   logo: {
     padding: "24px 20px",
     borderBottom: "1px solid rgba(0,255,0,0.08)",
@@ -422,16 +545,20 @@ const styles = {
     alignItems: "center",
     gap: 10,
   }),
-  main: {
-    marginLeft: 260,
-    padding: "24px 32px",
+  main: (mobile) => ({
+    marginLeft: mobile ? 0 : 260,
+    padding: mobile ? "72px 16px 80px" : "24px 32px",
     minHeight: "100vh",
-  },
+    overflowY: "auto",
+    WebkitOverflowScrolling: "touch",
+  }),
   header: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 28,
+    flexWrap: "wrap",
+    gap: 12,
   },
   pageTitle: {
     fontSize: 26,
@@ -518,7 +645,7 @@ const styles = {
     borderRadius: 10,
     padding: "18px 20px",
     flex: 1,
-    minWidth: 140,
+    minWidth: 100,
   },
   statValue: {
     fontSize: 28,
@@ -542,6 +669,7 @@ const styles = {
     justifyContent: "center",
     zIndex: 1000,
     backdropFilter: "blur(8px)",
+    padding: "env(safe-area-inset-top, 0) 0 env(safe-area-inset-bottom, 0) 0",
   },
   modalContent: {
     background: "#12131a",
@@ -552,6 +680,7 @@ const styles = {
     maxWidth: 600,
     maxHeight: "85vh",
     overflow: "auto",
+    WebkitOverflowScrolling: "touch",
   },
   tab: (active) => ({
     padding: "8px 18px",
@@ -762,7 +891,7 @@ function GPSTracker({ caseData, onMileageUpdate }) {
         )}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+      <div className="cv-grid3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
         <div style={{ background: "rgba(0,0,0,0.3)", borderRadius: 8, padding: 14, textAlign: "center" }}>
           <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 22, fontWeight: 700, color: "#0f0" }}>
             {distance.toFixed(2)}
@@ -1014,7 +1143,7 @@ function ExpensesPanel({ caseData, onUpdate }) {
       </div>
 
       {/* Summary Cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 20 }}>
+      <div className="cv-grid3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 20 }}>
         <div style={{ background: "rgba(0,255,0,0.04)", borderRadius: 8, padding: 14, textAlign: "center", border: "1px solid rgba(0,255,0,0.1)" }}>
           <div style={{ fontFamily: "'JetBrains Mono'", fontSize: 22, fontWeight: 700, color: "#0f0" }}>${totalExpenses.toFixed(2)}</div>
           <div style={{ fontSize: 10, color: "#666", letterSpacing: 1 }}>TOTAL EXPENSES</div>
@@ -1103,7 +1232,7 @@ function ExpensesPanel({ caseData, onUpdate }) {
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+          <div className="cv-grid2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
             <div>
               <label style={{ fontSize: 10, color: "#888", letterSpacing: 1, display: "block", marginBottom: 4 }}>VENDOR / MERCHANT</label>
               <input style={styles.input} value={form.vendor} onChange={(e) => setForm({ ...form, vendor: e.target.value })} placeholder="e.g. Marriott, Shell, Subway" />
@@ -1114,7 +1243,7 @@ function ExpensesPanel({ caseData, onUpdate }) {
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+          <div className="cv-grid2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
             <div>
               <label style={{ fontSize: 10, color: "#888", letterSpacing: 1, display: "block", marginBottom: 4 }}>NOTES</label>
               <input style={styles.input} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Additional details..." />
@@ -1249,7 +1378,7 @@ function CaseRateOverrides({ caseData, onUpdate }) {
             Override rates for this case only. Leave blank to use the client or agency default rate.
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 2, marginBottom: 8, fontSize: 9, color: "#555", letterSpacing: 1, fontWeight: 600, padding: "0 4px" }}>
+          <div className="cv-grid3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 2, marginBottom: 8, fontSize: 9, color: "#555", letterSpacing: 1, fontWeight: 600, padding: "0 4px" }}>
             <span>RATE</span>
             <span style={{ textAlign: "center" }}>EFFECTIVE RATE</span>
             <span style={{ textAlign: "center" }}>CASE OVERRIDE</span>
@@ -1263,7 +1392,7 @@ function CaseRateOverrides({ caseData, onUpdate }) {
             const agencyRate = getAgencyRate(row.key);
 
             return (
-              <div key={row.key} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 2, alignItems: "center", padding: "8px 4px", borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
+              <div key={row.key} className="cv-grid3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 2, alignItems: "center", padding: "8px 4px", borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
                 <div>
                   <div style={{ fontSize: 12, color: "#ccc", fontWeight: 500 }}>{row.label}</div>
                   <div style={{ fontSize: 10, color: "#555", fontFamily: "'JetBrains Mono'", marginTop: 2 }}>
@@ -1461,7 +1590,7 @@ function InvoicePanel({ caseData, onUpdate }) {
           </div>
 
           {/* Client & Dates */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 28 }}>
+          <div className="cv-grid2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 28 }}>
             <div>
               <div style={{ fontSize: 10, fontWeight: 700, color: "#999", letterSpacing: 1.5, marginBottom: 6 }}>BILL TO</div>
               <div style={{ fontSize: 15, fontWeight: 600, color: "#111" }}>{inv.client}</div>
@@ -1581,7 +1710,7 @@ function InvoicePanel({ caseData, onUpdate }) {
               <span style={{ color: RATE_SOURCE_LABELS.case.color }}>● Case Override</span>
             </div>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+          <div className="cv-grid3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
             <div>
               <label style={{ fontSize: 10, color: "#888", letterSpacing: 1, display: "block", marginBottom: 4 }}>
                 HOURLY RATE ($) <span style={{ color: RATE_SOURCE_LABELS[rateSources.hourly]?.color, fontSize: 9 }}>({RATE_SOURCE_LABELS[rateSources.hourly]?.label})</span>
@@ -1643,7 +1772,7 @@ function InvoicePanel({ caseData, onUpdate }) {
         </div>
 
         {/* Invoice Details */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
+        <div className="cv-grid2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
           <div>
             <label style={{ fontSize: 10, color: "#888", letterSpacing: 1, display: "block", marginBottom: 4 }}>CLIENT EMAIL</label>
             <input type="email" style={styles.input} value={clientEmail} onChange={(e) => setClientEmail(e.target.value)} placeholder="client@example.com" />
@@ -1660,7 +1789,7 @@ function InvoicePanel({ caseData, onUpdate }) {
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
+        <div className="cv-grid2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
           <div>
             <label style={{ fontSize: 10, color: "#888", letterSpacing: 1, display: "block", marginBottom: 4 }}>DISCOUNT (%)</label>
             <input type="number" min="0" max="100" style={styles.input} value={discount} onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)} />
@@ -1956,7 +2085,7 @@ function NewCaseModal({ onClose, onSave }) {
             <label style={{ fontSize: 11, color: "#888", letterSpacing: 1, textTransform: "uppercase", display: "block", marginBottom: 6 }}>Subject</label>
             <input style={styles.input} value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} placeholder="Subject of investigation" />
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div className="cv-grid2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div>
               <label style={{ fontSize: 11, color: "#888", letterSpacing: 1, textTransform: "uppercase", display: "block", marginBottom: 6 }}>Case Type</label>
               <select style={styles.select} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
@@ -1982,7 +2111,7 @@ function NewCaseModal({ onClose, onSave }) {
           {AGENTS_DB.length > 1 && (
             <div style={{ background: "rgba(0,255,0,0.03)", border: "1px solid rgba(0,255,0,0.08)", borderRadius: 8, padding: 14 }}>
               <div style={{ fontSize: 11, color: "#0f0", letterSpacing: 1, textTransform: "uppercase", marginBottom: 10, fontFamily: "'JetBrains Mono'", fontWeight: 600 }}>Assignment</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div className="cv-grid2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <div>
                   <label style={{ fontSize: 10, color: "#888", letterSpacing: 1, display: "block", marginBottom: 4 }}>LEAD INVESTIGATOR</label>
                   <select style={styles.select} value={form.leadAgent} onChange={(e) => setForm({ ...form, leadAgent: e.target.value })}>
@@ -2059,38 +2188,69 @@ function CaseDetail({ caseData, onBack, onUpdate }) {
 
   const tabs = ["overview", "updates", "documents", "tracking", "expenses", "media", "invoices", "custody", "ai"];
 
+  const isMobile = useIsMobile();
+
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-        <button style={{ ...styles.btn(), padding: "6px 12px" }} onClick={onBack}>← Back</button>
-        <div style={{ flex: 1 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontFamily: "'JetBrains Mono'", fontSize: 12, color: "#555" }}>{caseData.id}</span>
+      {!isMobile && (
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+          <button style={{ ...styles.btn(), padding: "6px 12px" }} onClick={onBack}>← Back</button>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontFamily: "'JetBrains Mono'", fontSize: 12, color: "#555" }}>{caseData.id}</span>
+              <span style={styles.badge(STATUS_COLORS[caseData.status])}>{STATUS_COLORS[caseData.status].label}</span>
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: "#fff", marginTop: 2 }}>{caseData.title}</div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {caseData.status === "active" && (
+              <button style={{ ...styles.btn(), borderColor: "#f90", color: "#f90" }} onClick={() => toggleStatus("paused")}>
+                <Icon name="pause" size={12} /> Pause
+              </button>
+            )}
+            {caseData.status === "paused" && (
+              <button style={styles.btn("primary")} onClick={() => toggleStatus("active")}>
+                <Icon name="play" size={12} /> Resume
+              </button>
+            )}
+            {(caseData.status === "active" || caseData.status === "paused") && (
+              <button style={{ ...styles.btn(), borderColor: "#4af", color: "#4af" }} onClick={() => toggleStatus("completed")}>
+                <Icon name="check" size={12} /> Complete
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {isMobile && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+            <span style={{ fontFamily: "'JetBrains Mono'", fontSize: 11, color: "#555" }}>{caseData.id}</span>
             <span style={styles.badge(STATUS_COLORS[caseData.status])}>{STATUS_COLORS[caseData.status].label}</span>
           </div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: "#fff", marginTop: 2 }}>{caseData.title}</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: "#fff", marginBottom: 10 }}>{caseData.title}</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {caseData.status === "active" && (
+              <button style={{ ...styles.btn(), borderColor: "#f90", color: "#f90", padding: "6px 12px", fontSize: 11 }} onClick={() => toggleStatus("paused")}>
+                <Icon name="pause" size={11} /> Pause
+              </button>
+            )}
+            {caseData.status === "paused" && (
+              <button style={{ ...styles.btn("primary"), padding: "6px 12px", fontSize: 11 }} onClick={() => toggleStatus("active")}>
+                <Icon name="play" size={11} /> Resume
+              </button>
+            )}
+            {(caseData.status === "active" || caseData.status === "paused") && (
+              <button style={{ ...styles.btn(), borderColor: "#4af", color: "#4af", padding: "6px 12px", fontSize: 11 }} onClick={() => toggleStatus("completed")}>
+                <Icon name="check" size={11} /> Complete
+              </button>
+            )}
+          </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          {caseData.status === "active" && (
-            <button style={{ ...styles.btn(), borderColor: "#f90", color: "#f90" }} onClick={() => toggleStatus("paused")}>
-              <Icon name="pause" size={12} /> Pause
-            </button>
-          )}
-          {caseData.status === "paused" && (
-            <button style={styles.btn("primary")} onClick={() => toggleStatus("active")}>
-              <Icon name="play" size={12} /> Resume
-            </button>
-          )}
-          {(caseData.status === "active" || caseData.status === "paused") && (
-            <button style={{ ...styles.btn(), borderColor: "#4af", color: "#4af" }} onClick={() => toggleStatus("completed")}>
-              <Icon name="check" size={12} /> Complete
-            </button>
-          )}
-        </div>
-      </div>
+      )}
 
       {/* Tabs */}
-      <div style={{ display: "flex", gap: 0, borderBottom: "1px solid rgba(255,255,255,0.06)", marginBottom: 24 }}>
+      <div className="cv-tabs" style={{ display: "flex", gap: 0, borderBottom: "1px solid rgba(255,255,255,0.06)", marginBottom: 24 }}>
         {tabs.map((t) => (
           <button key={t} style={styles.tab(tab === t)} onClick={() => setTab(t)}>
             {t === "ai" ? "AI Analysis" : t === "invoices" ? "Invoices" : t === "expenses" ? "Expenses" : t === "custody" ? "Chain of Custody" : t.charAt(0).toUpperCase() + t.slice(1)}
@@ -2101,7 +2261,7 @@ function CaseDetail({ caseData, onBack, onUpdate }) {
       {/* Tab Content */}
       {tab === "overview" && (
         <div>
-          <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
+          <div className="cv-stats" style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
             <StatCard value={caseData.updates.length} label="Updates" icon="doc" />
             <StatCard value={caseData.documents.length} label="Documents" icon="doc" />
             <StatCard value={`${totalMiles.toFixed(1)} mi`} label="Mileage" icon="car" />
@@ -2109,7 +2269,7 @@ function CaseDetail({ caseData, onBack, onUpdate }) {
             <StatCard value={`$${totalExpenses.toFixed(0)}`} label="Expenses" icon="expense" />
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+          <div className="cv-grid2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             <div style={styles.card}>
               <div style={{ fontSize: 11, color: "#666", letterSpacing: 1, textTransform: "uppercase", marginBottom: 10 }}>Case Info</div>
               {(() => {
@@ -2549,7 +2709,7 @@ function TeamPage({ onRefresh }) {
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
+        <div className="cv-stats" style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
           <StatCard value={agentCases.length} label="Total Cases" icon="cases" />
           <StatCard value={asLead.length} label="As Lead PI" icon="assign" />
           <StatCard value={agentCases.filter((c) => c.status === "active").length} label="Active" icon="play" />
@@ -2557,7 +2717,7 @@ function TeamPage({ onRefresh }) {
           <StatCard value={agentAudits.length} label="Audit Events" icon="shield" />
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
+        <div className="cv-grid2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
           <div style={styles.card}>
             <div style={{ fontSize: 11, color: "#666", letterSpacing: 1, textTransform: "uppercase", marginBottom: 10 }}>Contact</div>
             {[
@@ -2608,7 +2768,7 @@ function TeamPage({ onRefresh }) {
 
   return (
     <div>
-      <div style={styles.header}>
+      <div className="cv-header" style={styles.header}>
         <div>
           <div style={styles.pageTitle}>Team</div>
           <div style={{ fontSize: 13, color: "#666", marginTop: 2 }}>
@@ -2637,7 +2797,7 @@ function TeamPage({ onRefresh }) {
         <div style={{ background: "rgba(0,255,0,0.03)", border: "1px solid rgba(0,255,0,0.12)", borderRadius: 10, padding: 20, marginBottom: 20 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: "#0f0", marginBottom: 14, fontFamily: "'JetBrains Mono'", letterSpacing: 1 }}>ADD TEAM MEMBER</div>
           <div style={{ display: "grid", gap: 12 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div className="cv-grid2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <div>
                 <label style={{ fontSize: 10, color: "#888", letterSpacing: 1, display: "block", marginBottom: 4 }}>FULL NAME *</label>
                 <input style={styles.input} value={agentForm.name} onChange={(e) => setAgentForm({ ...agentForm, name: e.target.value })} placeholder="e.g. John Davis" />
@@ -2651,7 +2811,7 @@ function TeamPage({ onRefresh }) {
                 </select>
               </div>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+            <div className="cv-grid3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
               <div>
                 <label style={{ fontSize: 10, color: "#888", letterSpacing: 1, display: "block", marginBottom: 4 }}>EMAIL</label>
                 <input style={styles.input} value={agentForm.email} onChange={(e) => setAgentForm({ ...agentForm, email: e.target.value })} placeholder="email@agency.com" />
@@ -2751,7 +2911,7 @@ function SettingsPage({ onRefresh }) {
 
   return (
     <div>
-      <div style={styles.header}>
+      <div className="cv-header" style={styles.header}>
         <div>
           <div style={styles.pageTitle}>Settings</div>
           <div style={{ fontSize: 13, color: "#666", marginTop: 2 }}>Agency defaults & billing rate configuration</div>
@@ -2767,7 +2927,7 @@ function SettingsPage({ onRefresh }) {
       {/* Agency Info */}
       <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, padding: 20, marginBottom: 24 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: "#fff", marginBottom: 14, letterSpacing: 0.5 }}>Agency Information</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div className="cv-grid2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <div>
             <label style={{ fontSize: 10, color: "#888", letterSpacing: 1, display: "block", marginBottom: 4 }}>AGENCY NAME</label>
             <input style={styles.input} value={settings.agencyName} onChange={(e) => setSettings({ ...settings, agencyName: e.target.value })} />
@@ -2789,7 +2949,7 @@ function SettingsPage({ onRefresh }) {
             <input style={styles.input} value={settings.agencyAddress} onChange={(e) => setSettings({ ...settings, agencyAddress: e.target.value })} />
           </div>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
+        <div className="cv-grid2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
           <div>
             <label style={{ fontSize: 10, color: "#888", letterSpacing: 1, display: "block", marginBottom: 4 }}>DEFAULT PAYMENT TERMS</label>
             <select style={styles.select} value={settings.defaultTerms} onChange={(e) => setSettings({ ...settings, defaultTerms: e.target.value })}>
@@ -2819,7 +2979,7 @@ function SettingsPage({ onRefresh }) {
         <div style={{ fontSize: 12, color: "#888", lineHeight: 1.6 }}>
           Rates flow through three levels. When creating an invoice, the system checks each level in order and uses the first one it finds:
         </div>
-        <div style={{ display: "flex", gap: 12, marginTop: 10 }}>
+        <div className="cv-cascade" style={{ display: "flex", gap: 12, marginTop: 10 }}>
           <div style={{ flex: 1, padding: "8px 12px", background: "rgba(255,153,0,0.06)", borderRadius: 6, borderLeft: "3px solid #f90" }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: "#f90", letterSpacing: 1, marginBottom: 2 }}>1. CASE OVERRIDE</div>
             <div style={{ fontSize: 11, color: "#888" }}>Set per-case on the Overview tab. Use for negotiated or special rates.</div>
@@ -2838,7 +2998,7 @@ function SettingsPage({ onRefresh }) {
       {/* Default Rates Grid */}
       <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, padding: 20, marginBottom: 20 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: "#fff", marginBottom: 16, letterSpacing: 0.5 }}>Default Billing Rates</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+        <div className="cv-grid2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
           {rateFields.map((field) => (
             <div key={field.key} style={{ background: "rgba(255,255,255,0.02)", borderRadius: 8, padding: "12px 14px", border: "1px solid rgba(255,255,255,0.04)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
@@ -2894,7 +3054,7 @@ function AuditLogPage({ cases }) {
       <div style={{ fontSize: 13, color: "#666", marginBottom: 24 }}>Immutable, hash-chained record of all system activity</div>
 
       {/* Security Status */}
-      <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
+      <div className="cv-stats" style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
         <div style={{ ...styles.stat, borderColor: chainIntact ? "rgba(0,255,0,0.15)" : "rgba(255,68,68,0.2)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <Icon name={chainIntact ? "verified" : "broken"} size={20} />
@@ -2984,7 +3144,7 @@ function Dashboard({ cases, onSelectCase }) {
       <div style={{ fontSize: 26, fontWeight: 700, color: "#fff", marginBottom: 4 }}>Dashboard</div>
       <div style={{ fontSize: 13, color: "#666", marginBottom: 24 }}>Investigation overview and status</div>
 
-      <div style={{ display: "flex", gap: 12, marginBottom: 28, flexWrap: "wrap" }}>
+      <div className="cv-stats" style={{ display: "flex", gap: 12, marginBottom: 28, flexWrap: "wrap" }}>
         <StatCard value={cases.length} label="Total Cases" icon="cases" />
         <StatCard value={activeCases} label="Active" icon="play" />
         <StatCard value={CLIENTS_DB.length} label="Clients" icon="clients" />
@@ -3040,7 +3200,7 @@ function CasesList({ cases, onSelectCase, onNewCase }) {
 
   return (
     <div>
-      <div style={styles.header}>
+      <div className="cv-header" style={styles.header}>
         <div>
           <div style={styles.pageTitle}>Cases</div>
           <div style={{ fontSize: 13, color: "#666", marginTop: 2 }}>{cases.length} total investigations</div>
@@ -3048,7 +3208,7 @@ function CasesList({ cases, onSelectCase, onNewCase }) {
         <button style={styles.btn("primary")} onClick={onNewCase}><Icon name="add" size={14} /> New Case</button>
       </div>
 
-      <div style={{ display: "flex", gap: 10, marginBottom: 20, alignItems: "center", flexWrap: "wrap" }}>
+      <div className="cv-filters" style={{ display: "flex", gap: 10, marginBottom: 20, alignItems: "center", flexWrap: "wrap" }}>
         <div style={{ position: "relative", flex: 1, minWidth: 180 }}>
           <input style={{ ...styles.input, paddingLeft: 36 }} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search cases..." />
           <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }}><Icon name="search" size={14} /></span>
@@ -3138,7 +3298,7 @@ function NewClientModal({ onClose, onSave }) {
         <div style={{ fontSize: 12, color: "#666", marginBottom: 24 }}>Add a client to link cases and invoices</div>
 
         <div style={{ display: "grid", gap: 16 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div className="cv-grid2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div>
               <label style={{ fontSize: 11, color: "#888", letterSpacing: 1, textTransform: "uppercase", display: "block", marginBottom: 6 }}>Client Type</label>
               <select style={styles.select} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
@@ -3169,7 +3329,7 @@ function NewClientModal({ onClose, onSave }) {
             </div>
           )}
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div className="cv-grid2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div>
               <label style={{ fontSize: 11, color: "#888", letterSpacing: 1, textTransform: "uppercase", display: "block", marginBottom: 6 }}>Email</label>
               <input type="email" style={styles.input} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="email@example.com" />
@@ -3199,7 +3359,7 @@ function NewClientModal({ onClose, onSave }) {
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div className="cv-grid2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div>
               <label style={{ fontSize: 11, color: "#888", letterSpacing: 1, textTransform: "uppercase", display: "block", marginBottom: 6 }}>Default Hourly Rate ($)</label>
               <input type="number" style={styles.input} value={form.defaultHourlyRate} onChange={(e) => setForm({ ...form, defaultHourlyRate: parseFloat(e.target.value) || 0 })} />
@@ -3272,7 +3432,7 @@ function ClientDetail({ client, cases, onBack, onSelectCase, onUpdateClient }) {
         <div style={{ background: "rgba(0,255,0,0.03)", border: "1px solid rgba(0,255,0,0.1)", borderRadius: 10, padding: 20, marginBottom: 20 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: "#0f0", marginBottom: 14, letterSpacing: 1, fontFamily: "'JetBrains Mono'" }}>EDIT CLIENT</div>
           <div style={{ display: "grid", gap: 12 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div className="cv-grid2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <div>
                 <label style={{ fontSize: 10, color: "#888", letterSpacing: 1, display: "block", marginBottom: 4 }}>NAME</label>
                 <input style={styles.input} value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
@@ -3282,7 +3442,7 @@ function ClientDetail({ client, cases, onBack, onSelectCase, onUpdateClient }) {
                 <input style={styles.input} value={editForm.contactName} onChange={(e) => setEditForm({ ...editForm, contactName: e.target.value })} />
               </div>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div className="cv-grid2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <div>
                 <label style={{ fontSize: 10, color: "#888", letterSpacing: 1, display: "block", marginBottom: 4 }}>EMAIL</label>
                 <input style={styles.input} value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
@@ -3292,7 +3452,7 @@ function ClientDetail({ client, cases, onBack, onSelectCase, onUpdateClient }) {
                 <input style={styles.input} value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} />
               </div>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div className="cv-grid2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <div>
                 <label style={{ fontSize: 10, color: "#888", letterSpacing: 1, display: "block", marginBottom: 4 }}>HOURLY RATE ($)</label>
                 <input type="number" style={styles.input} value={editForm.defaultHourlyRate} onChange={(e) => setEditForm({ ...editForm, defaultHourlyRate: parseFloat(e.target.value) || 0 })} />
@@ -3323,7 +3483,7 @@ function ClientDetail({ client, cases, onBack, onSelectCase, onUpdateClient }) {
       </div>
 
       {/* Contact Info & Billing */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
+      <div className="cv-grid2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
         <div style={styles.card}>
           <div style={{ fontSize: 11, color: "#666", letterSpacing: 1, textTransform: "uppercase", marginBottom: 10 }}>Contact Information</div>
           {[
@@ -3447,7 +3607,7 @@ function ClientsPage({ cases, onSelectCase, onRefresh }) {
 
   return (
     <div>
-      <div style={styles.header}>
+      <div className="cv-header" style={styles.header}>
         <div>
           <div style={styles.pageTitle}>Clients</div>
           <div style={{ fontSize: 13, color: "#666", marginTop: 2 }}>{CLIENTS_DB.length} total clients</div>
@@ -3455,7 +3615,7 @@ function ClientsPage({ cases, onSelectCase, onRefresh }) {
         <button style={styles.btn("primary")} onClick={() => setShowNewClient(true)}><Icon name="add" size={14} /> New Client</button>
       </div>
 
-      <div style={{ display: "flex", gap: 10, marginBottom: 20, alignItems: "center" }}>
+      <div className="cv-filters" style={{ display: "flex", gap: 10, marginBottom: 20, alignItems: "center" }}>
         <div style={{ position: "relative", flex: 1 }}>
           <input style={{ ...styles.input, paddingLeft: 36 }} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search clients..." />
           <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }}><Icon name="search" size={14} /></span>
@@ -3590,6 +3750,27 @@ function InvoicesPage({ cases, onSelectCase }) {
   );
 }
 
+// ─── Responsive Hook ───
+function useIsMobile() {
+  const [mobile, setMobile] = useState(window.innerWidth <= 768);
+  useEffect(() => {
+    const handler = () => setMobile(window.innerWidth <= 768);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+  return mobile;
+}
+
+// ─── Responsive Grid Helper ───
+function ResponsiveGrid({ columns = "1fr 1fr", mobileColumns = "1fr", gap = 16, children, style = {} }) {
+  const mobile = useIsMobile();
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: mobile ? mobileColumns : columns, gap, ...style }}>
+      {children}
+    </div>
+  );
+}
+
 // ─── Main App ───
 export default function App() {
   const [page, setPage] = useState("dashboard");
@@ -3597,6 +3778,8 @@ export default function App() {
   const [selectedCase, setSelectedCase] = useState(null);
   const [showNewCase, setShowNewCase] = useState(false);
   const [time, setTime] = useState(new Date());
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const mobile = useIsMobile();
 
   useEffect(() => {
     const t = setInterval(() => setTime(new Date()), 1000);
@@ -3604,6 +3787,12 @@ export default function App() {
   }, []);
 
   const refreshCases = () => { persistAll(); setCases([...CASES_DB]); };
+
+  const navigate = (pageId) => {
+    setPage(pageId);
+    setSelectedCase(null);
+    if (mobile) setSidebarOpen(false);
+  };
 
   const navItems = [
     { id: "dashboard", icon: "dashboard", label: "Dashboard" },
@@ -3615,21 +3804,61 @@ export default function App() {
     { id: "settings", icon: "settings", label: "Settings" },
   ];
 
+  // Bottom nav for mobile — quick access items
+  const bottomNavItems = [
+    { id: "dashboard", icon: "dashboard", label: "Home" },
+    { id: "cases", icon: "cases", label: "Cases" },
+    { id: "clients", icon: "clients", label: "Clients" },
+    { id: "invoices", icon: "invoice", label: "Invoices" },
+    { id: "_more", icon: "settings", label: "More" },
+  ];
+
+  const currentPageTitle = selectedCase ? selectedCase.title : navItems.find((n) => n.id === page)?.label || "CaseVault";
+
   return (
     <div style={styles.app}>
       <style>{FONTS}</style>
       <div style={styles.scanline} />
 
+      {/* Mobile Header Bar */}
+      {mobile && (
+        <div style={styles.mobileHeader}>
+          <button style={styles.hamburger} onClick={() => setSidebarOpen(!sidebarOpen)}>☰</button>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#0f0", fontFamily: "'JetBrains Mono'", letterSpacing: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {selectedCase ? selectedCase.id : "◈ CASEVAULT"}
+            </div>
+            <div style={{ fontSize: 10, color: "#555", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{currentPageTitle}</div>
+          </div>
+          {selectedCase && (
+            <button style={{ ...styles.btn(), padding: "6px 12px", fontSize: 11 }} onClick={() => setSelectedCase(null)}>← Back</button>
+          )}
+          {!selectedCase && page === "cases" && (
+            <button style={{ ...styles.btn("primary"), padding: "6px 12px", fontSize: 11 }} onClick={() => setShowNewCase(true)}>
+              <Icon name="add" size={12} /> New
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Sidebar Overlay (mobile) */}
+      {mobile && sidebarOpen && (
+        <div style={styles.overlay} onClick={() => setSidebarOpen(false)} />
+      )}
+
       {/* Sidebar */}
-      <div style={styles.sidebar}>
+      <div style={styles.sidebar(mobile, sidebarOpen)}>
         <div style={styles.logo}>
-          <div style={styles.logoText}>◈ CASEVAULT</div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={styles.logoText}>◈ CASEVAULT</div>
+            {mobile && <button style={{ background: "none", border: "none", color: "#555", fontSize: 20, cursor: "pointer" }} onClick={() => setSidebarOpen(false)}>✕</button>}
+          </div>
           <div style={styles.logoSub}>PI Case Management</div>
         </div>
 
-        <div style={{ flex: 1, paddingTop: 12 }}>
+        <div style={{ flex: 1, paddingTop: 12, overflowY: "auto" }}>
           {navItems.map((item) => (
-            <div key={item.id} style={styles.navItem(page === item.id)} onClick={() => { setPage(item.id); setSelectedCase(null); }}>
+            <div key={item.id} style={styles.navItem(page === item.id && !selectedCase)} onClick={() => navigate(item.id)}>
               <Icon name={item.icon} size={15} />
               {item.label}
             </div>
@@ -3638,22 +3867,21 @@ export default function App() {
 
         {/* Clock & User */}
         <div style={{ padding: "16px 20px", borderTop: "1px solid rgba(0,255,0,0.06)" }}>
-          {/* Current user indicator */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, padding: "6px 8px", background: "rgba(0,255,0,0.04)", borderRadius: 6, cursor: "pointer" }}
-            onClick={() => { setPage("team"); setSelectedCase(null); }}>
+            onClick={() => navigate("team")}>
             <Icon name={CURRENT_USER?.role === "owner" ? "crown" : "user"} size={12} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: "#0f0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{CURRENT_USER?.name || "Not logged in"}</div>
               <div style={{ fontSize: 9, color: "#555" }}>{AGENT_ROLES[CURRENT_USER?.role]?.label || ""}</div>
             </div>
           </div>
-          {isSoloMode() && (
+          {isSoloMode() && !mobile && (
             <button style={{ ...styles.btn(), width: "100%", fontSize: 11, padding: "6px 10px", justifyContent: "center", marginBottom: 8 }}
-              onClick={() => { setPage("team"); setSelectedCase(null); }}>
+              onClick={() => navigate("team")}>
               <Icon name="add" size={10} /> Add Team Members
             </button>
           )}
-          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 18, color: "#0f0", fontWeight: 600 }}>
+          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: mobile ? 14 : 18, color: "#0f0", fontWeight: 600 }}>
             {time.toLocaleTimeString()}
           </div>
           <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: "rgba(0,255,0,0.3)", marginTop: 2 }}>
@@ -3663,7 +3891,7 @@ export default function App() {
       </div>
 
       {/* Main */}
-      <div style={styles.main}>
+      <div style={styles.main(mobile)}>
         {selectedCase ? (
           <CaseDetail
             caseData={selectedCase}
@@ -3695,6 +3923,19 @@ export default function App() {
           <SettingsPage onRefresh={refreshCases} />
         ) : null}
       </div>
+
+      {/* Mobile Bottom Nav */}
+      {mobile && !selectedCase && (
+        <div style={styles.bottomNav}>
+          {bottomNavItems.map((item) => (
+            <button key={item.id} style={styles.bottomNavItem(page === item.id)}
+              onClick={() => item.id === "_more" ? setSidebarOpen(true) : navigate(item.id)}>
+              <Icon name={item.icon} size={20} />
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {showNewCase && (
         <NewCaseModal
