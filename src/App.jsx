@@ -787,14 +787,22 @@ function StatCard({ value, label, icon }) {
 }
 
 function GPSTracker({ caseData, onMileageUpdate }) {
+  const [mode, setMode] = useState(null); // null | "time" | "gps" — time = timer only, gps = timer + location
   const [tracking, setTracking] = useState(false);
   const [currentPos, setCurrentPos] = useState(null);
   const [distance, setDistance] = useState(0);
   const [elapsed, setElapsed] = useState(0);
   const [positions, setPositions] = useState([]);
+  const [showManual, setShowManual] = useState(false);
+  const [manualMiles, setManualMiles] = useState("");
+  const [manualMinutes, setManualMinutes] = useState("");
+  const [manualNote, setManualNote] = useState("");
+  const [gpsStatus, setGpsStatus] = useState("idle"); // idle | active | paused | error
   const watchRef = useRef(null);
   const timerRef = useRef(null);
   const startTimeRef = useRef(null);
+  const wakeLockRef = useRef(null);
+  const sessionKeyRef = useRef(null);
 
   const calcDistance = (lat1, lon1, lat2, lon2) => {
     const R = 3959;
@@ -804,65 +812,6 @@ function GPSTracker({ caseData, onMileageUpdate }) {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   };
 
-  const startTracking = () => {
-    if (!navigator.geolocation) {
-      alert("Geolocation not supported");
-      return;
-    }
-    setTracking(true);
-    setDistance(0);
-    setElapsed(0);
-    setPositions([]);
-    startTimeRef.current = Date.now();
-
-    timerRef.current = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - startTimeRef.current) / 1000));
-    }, 1000);
-
-    watchRef.current = navigator.geolocation.watchPosition(
-      (pos) => {
-        const newPos = { lat: pos.coords.latitude, lng: pos.coords.longitude, time: Date.now() };
-        setCurrentPos(newPos);
-        setPositions((prev) => {
-          if (prev.length > 0) {
-            const last = prev[prev.length - 1];
-            const d = calcDistance(last.lat, last.lng, newPos.lat, newPos.lng);
-            if (d > 0.01) {
-              setDistance((prev) => prev + d);
-              return [...prev, newPos];
-            }
-            return prev;
-          }
-          return [newPos];
-        });
-      },
-      (err) => console.error(err),
-      { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
-    );
-  };
-
-  const stopTracking = () => {
-    setTracking(false);
-    if (watchRef.current !== null) navigator.geolocation.clearWatch(watchRef.current);
-    if (timerRef.current) clearInterval(timerRef.current);
-
-    if (distance > 0 || elapsed > 0) {
-      onMileageUpdate({
-        miles: parseFloat(distance.toFixed(2)),
-        duration: elapsed,
-        positions: positions,
-        timestamp: new Date().toISOString(),
-      });
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      if (watchRef.current !== null) navigator.geolocation.clearWatch(watchRef.current);
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, []);
-
   const formatTime = (s) => {
     const h = Math.floor(s / 3600);
     const m = Math.floor((s % 3600) / 60);
@@ -870,20 +819,229 @@ function GPSTracker({ caseData, onMileageUpdate }) {
     return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`;
   };
 
+  // Request wake lock to prevent screen sleep during tracking
+  const requestWakeLock = async () => {
+    try {
+      if ("wakeLock" in navigator) {
+        wakeLockRef.current = await navigator.wakeLock.request("screen");
+        wakeLockRef.current.addEventListener("release", () => { wakeLockRef.current = null; });
+      }
+    } catch (e) { /* Wake lock not available or denied */ }
+  };
+
+  const releaseWakeLock = () => {
+    if (wakeLockRef.current) {
+      wakeLockRef.current.release();
+      wakeLockRef.current = null;
+    }
+  };
+
+  // Save session to localStorage for background recovery
+  const saveSession = (dist, posArr) => {
+    if (sessionKeyRef.current) {
+      saveData("activeTracking", {
+        key: sessionKeyRef.current,
+        caseId: caseData.id,
+        startTime: startTimeRef.current,
+        mode,
+        distance: dist,
+        positions: posArr,
+      });
+    }
+  };
+
+  // Recover session on visibility change (app comes back to foreground)
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible" && tracking && startTimeRef.current) {
+        // Recalculate elapsed from original start time — survives background
+        const now = Date.now();
+        setElapsed(Math.floor((now - startTimeRef.current) / 1000));
+
+        // Restart GPS if it was active and got killed
+        if (mode === "gps" && watchRef.current === null) {
+          startGPS();
+          setGpsStatus("active");
+        }
+      }
+      if (document.visibilityState === "hidden" && tracking) {
+        saveSession(distance, positions);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [tracking, mode, distance, positions]);
+
+  const startGPS = () => {
+    if (!navigator.geolocation) {
+      setGpsStatus("error");
+      return;
+    }
+    setGpsStatus("active");
+    watchRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        const newPos = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy, time: Date.now() };
+        setCurrentPos(newPos);
+        setGpsStatus("active");
+        setPositions((prev) => {
+          if (prev.length > 0) {
+            const last = prev[prev.length - 1];
+            const d = calcDistance(last.lat, last.lng, newPos.lat, newPos.lng);
+            // Filter GPS jitter: ignore if < 0.005 mi (~26 ft) or accuracy too low
+            if (d > 0.005 && (pos.coords.accuracy < 50 || d > 0.05)) {
+              setDistance((prevDist) => prevDist + d);
+              const updated = [...prev, newPos];
+              saveSession(distance + d, updated);
+              return updated;
+            }
+            return prev;
+          }
+          return [newPos];
+        });
+      },
+      (err) => {
+        console.error("GPS Error:", err);
+        setGpsStatus(err.code === 1 ? "error" : "paused");
+      },
+      { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 }
+    );
+  };
+
+  const stopGPS = () => {
+    if (watchRef.current !== null) {
+      navigator.geolocation.clearWatch(watchRef.current);
+      watchRef.current = null;
+    }
+    setGpsStatus("idle");
+  };
+
+  const startTracking = (trackMode) => {
+    setMode(trackMode);
+    setTracking(true);
+    setDistance(0);
+    setElapsed(0);
+    setPositions([]);
+    setGpsStatus("idle");
+    startTimeRef.current = Date.now();
+    sessionKeyRef.current = "trk-" + Date.now();
+
+    // Timer uses start timestamp, not intervals — survives background
+    timerRef.current = setInterval(() => {
+      if (startTimeRef.current) {
+        setElapsed(Math.floor((Date.now() - startTimeRef.current) / 1000));
+      }
+    }, 1000);
+
+    if (trackMode === "gps") {
+      startGPS();
+    }
+
+    requestWakeLock();
+    saveSession(0, []);
+  };
+
+  const stopTracking = () => {
+    setTracking(false);
+    stopGPS();
+    if (timerRef.current) clearInterval(timerRef.current);
+    releaseWakeLock();
+
+    // Calculate final elapsed from timestamps for accuracy
+    const finalElapsed = startTimeRef.current ? Math.floor((Date.now() - startTimeRef.current) / 1000) : elapsed;
+
+    if (distance > 0 || finalElapsed > 0) {
+      onMileageUpdate({
+        miles: parseFloat(distance.toFixed(2)),
+        duration: finalElapsed,
+        positions: positions,
+        timestamp: new Date().toISOString(),
+        trackingMode: mode,
+      });
+    }
+
+    // Clean up saved session
+    try { localStorage.removeItem(STORAGE_PREFIX + "activeTracking"); } catch(e) {}
+    setMode(null);
+    startTimeRef.current = null;
+    sessionKeyRef.current = null;
+  };
+
+  const submitManual = () => {
+    const miles = parseFloat(manualMiles) || 0;
+    const mins = parseInt(manualMinutes) || 0;
+    if (miles <= 0 && mins <= 0) return alert("Enter miles, time, or both.");
+    onMileageUpdate({
+      miles,
+      duration: mins * 60,
+      positions: [],
+      timestamp: new Date().toISOString(),
+      trackingMode: "manual",
+      note: manualNote || undefined,
+    });
+    setManualMiles("");
+    setManualMinutes("");
+    setManualNote("");
+    setShowManual(false);
+  };
+
+  // Try to recover an active session on mount
+  useEffect(() => {
+    const saved = loadData("activeTracking", null);
+    if (saved && saved.caseId === caseData.id && saved.startTime) {
+      const age = Date.now() - saved.startTime;
+      if (age < 24 * 60 * 60 * 1000) { // Less than 24 hours old
+        if (confirm(`Found an active tracking session (${formatTime(Math.floor(age / 1000))} elapsed, ${saved.distance?.toFixed(2) || 0} mi). Resume it?`)) {
+          setMode(saved.mode);
+          setTracking(true);
+          setDistance(saved.distance || 0);
+          setPositions(saved.positions || []);
+          startTimeRef.current = saved.startTime;
+          sessionKeyRef.current = saved.key;
+          setElapsed(Math.floor(age / 1000));
+          timerRef.current = setInterval(() => {
+            setElapsed(Math.floor((Date.now() - saved.startTime) / 1000));
+          }, 1000);
+          if (saved.mode === "gps") startGPS();
+          requestWakeLock();
+          return;
+        }
+      }
+      try { localStorage.removeItem(STORAGE_PREFIX + "activeTracking"); } catch(e) {}
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      stopGPS();
+      if (timerRef.current) clearInterval(timerRef.current);
+      releaseWakeLock();
+    };
+  }, []);
+
+  const gpsStatusColors = { idle: "#555", active: "#0f0", paused: "#f90", error: "#f44" };
+  const gpsStatusLabels = { idle: "Off", active: "Tracking", paused: "Reconnecting...", error: "GPS Denied" };
+
   return (
     <div style={{ background: "rgba(0,255,0,0.03)", border: "1px solid rgba(0,255,0,0.1)", borderRadius: 10, padding: 20 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <Icon name="gps" size={18} />
-          <span style={{ fontWeight: 600, fontSize: 14 }}>GPS & Mileage Tracker</span>
+          <span style={{ fontWeight: 600, fontSize: 14 }}>Field Tracker</span>
           {tracking && (
-            <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "#0f0", animation: "pulse 1.5s infinite", marginLeft: 6 }} />
+            <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: gpsStatusColors[gpsStatus] || "#0f0", animation: "pulse 1.5s infinite", marginLeft: 4 }} />
+          )}
+          {tracking && (
+            <span style={{ fontSize: 10, color: gpsStatusColors[gpsStatus], fontFamily: "'JetBrains Mono'" }}>
+              {mode === "gps" ? gpsStatusLabels[gpsStatus] : "Timer Only"}
+            </span>
           )}
         </div>
         {!tracking ? (
-          <button style={styles.btn("primary")} onClick={startTracking}>
-            <Icon name="play" size={12} /> Start Tracking
-          </button>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button style={{ ...styles.btn(), fontSize: 11, padding: "8px 12px" }} onClick={() => setShowManual(!showManual)}>
+              <Icon name="edit" size={11} /> Manual
+            </button>
+          </div>
         ) : (
           <button style={{ ...styles.btn("primary"), borderColor: "#f44", color: "#f44", background: "rgba(255,68,68,0.1)" }} onClick={stopTracking}>
             <Icon name="stop" size={12} /> Stop & Save
@@ -891,32 +1049,90 @@ function GPSTracker({ caseData, onMileageUpdate }) {
         )}
       </div>
 
-      <div className="cv-grid3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-        <div style={{ background: "rgba(0,0,0,0.3)", borderRadius: 8, padding: 14, textAlign: "center" }}>
-          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 22, fontWeight: 700, color: "#0f0" }}>
-            {distance.toFixed(2)}
-          </div>
-          <div style={{ fontSize: 10, color: "#666", letterSpacing: 1, marginTop: 2 }}>MILES</div>
-        </div>
-        <div style={{ background: "rgba(0,0,0,0.3)", borderRadius: 8, padding: 14, textAlign: "center" }}>
-          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 22, fontWeight: 700, color: "#4af" }}>
-            {formatTime(elapsed)}
-          </div>
-          <div style={{ fontSize: 10, color: "#666", letterSpacing: 1, marginTop: 2 }}>ELAPSED</div>
-        </div>
-        <div style={{ background: "rgba(0,0,0,0.3)", borderRadius: 8, padding: 14, textAlign: "center" }}>
-          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 22, fontWeight: 700, color: "#f90" }}>
-            {currentPos ? `${currentPos.lat.toFixed(4)}` : "—"}
-          </div>
-          <div style={{ fontSize: 10, color: "#666", letterSpacing: 1, marginTop: 2 }}>LATITUDE</div>
-        </div>
-      </div>
-
-      {positions.length > 0 && (
-        <div style={{ marginTop: 12, fontSize: 11, color: "#555", fontFamily: "'JetBrains Mono', monospace" }}>
-          {positions.length} position points logged
+      {/* Start Options — only when not tracking */}
+      {!tracking && !showManual && (
+        <div className="cv-grid2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
+          <button style={{ ...styles.btn("primary"), width: "100%", justifyContent: "center", padding: "14px 16px" }} onClick={() => startTracking("gps")}>
+            <Icon name="gps" size={14} /> Start with GPS
+            <div style={{ fontSize: 9, color: "rgba(0,255,0,0.5)", marginTop: 2 }}>Time + Location + Mileage</div>
+          </button>
+          <button style={{ ...styles.btn(), width: "100%", justifyContent: "center", padding: "14px 16px" }} onClick={() => startTracking("time")}>
+            <Icon name="clock" size={14} /> Timer Only
+            <div style={{ fontSize: 9, color: "#666", marginTop: 2 }}>Time only, no GPS</div>
+          </button>
         </div>
       )}
+
+      {/* Manual Entry Form */}
+      {showManual && !tracking && (
+        <div style={{ background: "rgba(0,0,0,0.2)", borderRadius: 8, padding: 14, marginBottom: 12 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: "#888", letterSpacing: 1, marginBottom: 10 }}>MANUAL ENTRY</div>
+          <div className="cv-grid3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
+            <div>
+              <label style={{ fontSize: 10, color: "#666", display: "block", marginBottom: 4 }}>MILES</label>
+              <input type="number" step="0.1" style={styles.input} value={manualMiles} onChange={(e) => setManualMiles(e.target.value)} placeholder="0.0" />
+            </div>
+            <div>
+              <label style={{ fontSize: 10, color: "#666", display: "block", marginBottom: 4 }}>MINUTES</label>
+              <input type="number" style={styles.input} value={manualMinutes} onChange={(e) => setManualMinutes(e.target.value)} placeholder="0" />
+            </div>
+            <div>
+              <label style={{ fontSize: 10, color: "#666", display: "block", marginBottom: 4 }}>NOTE</label>
+              <input style={styles.input} value={manualNote} onChange={(e) => setManualNote(e.target.value)} placeholder="Optional" />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <button style={{ ...styles.btn(), fontSize: 11, padding: "6px 12px" }} onClick={() => setShowManual(false)}>Cancel</button>
+            <button style={{ ...styles.btn("primary"), fontSize: 11, padding: "6px 12px" }} onClick={submitManual}>
+              <Icon name="add" size={11} /> Log Entry
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Live Stats */}
+      {tracking && (
+        <div className="cv-grid3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+          <div style={{ background: "rgba(0,0,0,0.3)", borderRadius: 8, padding: 14, textAlign: "center" }}>
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 22, fontWeight: 700, color: mode === "gps" ? "#0f0" : "#555" }}>
+              {mode === "gps" ? distance.toFixed(2) : "—"}
+            </div>
+            <div style={{ fontSize: 10, color: "#666", letterSpacing: 1, marginTop: 2 }}>MILES</div>
+          </div>
+          <div style={{ background: "rgba(0,0,0,0.3)", borderRadius: 8, padding: 14, textAlign: "center" }}>
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 22, fontWeight: 700, color: "#4af" }}>
+              {formatTime(elapsed)}
+            </div>
+            <div style={{ fontSize: 10, color: "#666", letterSpacing: 1, marginTop: 2 }}>ELAPSED</div>
+          </div>
+          <div style={{ background: "rgba(0,0,0,0.3)", borderRadius: 8, padding: 14, textAlign: "center" }}>
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 22, fontWeight: 700, color: "#f90" }}>
+              {mode === "gps" && currentPos ? `${currentPos.lat.toFixed(4)}` : mode === "gps" ? "Waiting..." : "N/A"}
+            </div>
+            <div style={{ fontSize: 10, color: "#666", letterSpacing: 1, marginTop: 2 }}>{mode === "gps" ? "LATITUDE" : "GPS OFF"}</div>
+          </div>
+        </div>
+      )}
+
+      {/* GPS accuracy indicator */}
+      {tracking && mode === "gps" && currentPos?.accuracy && (
+        <div style={{ marginTop: 8, fontSize: 10, color: currentPos.accuracy < 20 ? "#0f0" : currentPos.accuracy < 50 ? "#f90" : "#f44", fontFamily: "'JetBrains Mono'" }}>
+          GPS accuracy: ±{Math.round(currentPos.accuracy)}m • {positions.length} points logged
+        </div>
+      )}
+
+      {/* Background notice */}
+      {tracking && (
+        <div style={{ marginTop: 10, padding: "8px 12px", background: "rgba(74,170,255,0.04)", border: "1px solid rgba(74,170,255,0.1)", borderRadius: 6 }}>
+          <div style={{ fontSize: 10, color: "#4af", lineHeight: 1.5 }}>
+            {mode === "gps"
+              ? "Timer uses timestamps and survives app switching. GPS may pause when the screen locks — mileage will resume when you return. Keep CaseVault visible for best GPS accuracy."
+              : "Timer runs on timestamps — it keeps counting even if you switch apps or lock your phone. Come back anytime and elapsed time will be accurate."
+            }
+          </div>
+        </div>
+      )}
+
       <style>{`@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }`}</style>
     </div>
   );
