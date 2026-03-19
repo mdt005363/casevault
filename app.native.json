@@ -15,6 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.mdt005363.casevault",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "CaseVault needs your location to track mileage during investigations.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "CaseVault needs background location access to track mileage while you use other apps during surveillance.",
@@ -23,6 +24,7 @@
       }
     },
     "android": {
+      "package": "com.mdt005363.casevault",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0a0b0f"
@@ -49,6 +51,12 @@
           "isAndroidForegroundServiceEnabled": true
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "fa5dcd8d-70f8-466c-bb3e-fe3d91bdd89d"
+      }
+    },
+    "owner": "mdt005363"
   }
 }
