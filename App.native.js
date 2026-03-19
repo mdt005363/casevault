@@ -195,46 +195,55 @@ export default function App() {
   };
 
   const startBackgroundLocation = async () => {
-    const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK);
-    if (!isRegistered) {
-      await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
-        accuracy: Location.Accuracy.High,
-        distanceInterval: 10, // meters — update every ~33 feet
-        timeInterval: 5000,   // or every 5 seconds
-        showsBackgroundLocationIndicator: true,
-        foregroundService: {
-          notificationTitle: 'CaseVault Tracking',
-          notificationBody: 'GPS mileage tracking is active',
-          notificationColor: '#00ff00',
-        },
-      });
+    try {
+      const { status: bgStatus } = await Location.requestBackgroundPermissionsAsync();
+      if (bgStatus === 'granted') {
+        const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK);
+        if (!isRegistered) {
+          await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
+            accuracy: Location.Accuracy.High,
+            distanceInterval: 10,
+            timeInterval: 5000,
+            showsBackgroundLocationIndicator: true,
+            foregroundService: {
+              notificationTitle: 'CaseVault Tracking',
+              notificationBody: 'GPS mileage tracking is active',
+              notificationColor: '#00ff00',
+            },
+          });
+        }
+        addLog('Background GPS enabled');
+        return true;
+      } else {
+        addLog('Background GPS not available — foreground only');
+        return false;
+      }
+    } catch (e) {
+      addLog('Background GPS error: ' + e.message);
+      return false;
     }
-    setGpsStatus('active');
-    addLog('Background GPS started');
   };
 
   const startTracking = async (trackMode) => {
-    // Request permissions
-    const { status: fgStatus } = await Location.requestForegroundPermissionsAsync();
-    if (fgStatus !== 'granted') {
-      Alert.alert('Permission Denied', 'CaseVault needs location access to track mileage.');
-      return;
-    }
-
-    if (trackMode === 'gps') {
-      const { status: bgStatus } = await Location.requestBackgroundPermissionsAsync();
-      if (bgStatus !== 'granted') {
-        Alert.alert(
-          'Background Location Required',
-          'CaseVault needs "Always Allow" location access to track mileage when the app is in the background. Go to Settings > CaseVault > Location > Always.',
-          [{ text: 'OK, start without background', onPress: () => startTrackingInner('timer') },
-           { text: 'Cancel' }]
-        );
+    try {
+      // Request foreground permission
+      const { status: fgStatus } = await Location.requestForegroundPermissionsAsync();
+      if (fgStatus !== 'granted') {
+        Alert.alert('Permission Denied', 'CaseVault needs location access to track mileage.');
         return;
       }
-    }
 
-    await startTrackingInner(trackMode);
+      // Start tracking immediately — don't block on background permission
+      await startTrackingInner(trackMode);
+
+      // Try to enable background location as a bonus (non-blocking)
+      if (trackMode === 'gps') {
+        startBackgroundLocation();
+      }
+    } catch (e) {
+      addLog('Start error: ' + e.message);
+      Alert.alert('Error', 'Failed to start tracking: ' + e.message);
+    }
   };
 
   const startTrackingInner = async (trackMode) => {
@@ -253,25 +262,58 @@ export default function App() {
       startTime: Date.now(),
       distance: 0,
       positions: [],
-      caseId: null, // Will be set when integrated with case management
+      caseId: null,
     };
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(session));
 
     if (trackMode === 'gps') {
-      await startBackgroundLocation();
-      // Also start foreground subscription for live updates
-      foregroundSubRef.current = await Location.watchPositionAsync(
-        { accuracy: Location.Accuracy.High, distanceInterval: 5 },
-        (loc) => {
-          setCurrentPos({
-            lat: loc.coords.latitude,
-            lng: loc.coords.longitude,
-            accuracy: loc.coords.accuracy,
-            speed: loc.coords.speed,
-          });
-          setGpsStatus('active');
-        }
-      );
+      // Start foreground GPS subscription for live updates
+      try {
+        foregroundSubRef.current = await Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.High, distanceInterval: 5 },
+          (loc) => {
+            const newPos = {
+              lat: loc.coords.latitude,
+              lng: loc.coords.longitude,
+              accuracy: loc.coords.accuracy,
+              speed: loc.coords.speed,
+            };
+            setCurrentPos(newPos);
+            setGpsStatus('active');
+
+            // Update distance in foreground
+            setPositions((prev) => {
+              if (prev.length > 0) {
+                const last = prev[prev.length - 1];
+                const d = haversine(last.lat, last.lng, newPos.lat, newPos.lng);
+                if (d > 0.005 && loc.coords.accuracy < 50) {
+                  setDistance((prevDist) => {
+                    const updated = prevDist + d;
+                    // Persist to storage
+                    AsyncStorage.getItem(STORAGE_KEY).then(raw => {
+                      if (raw) {
+                        const s = JSON.parse(raw);
+                        s.distance = updated;
+                        s.positions = [...(s.positions || []), newPos];
+                        AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+                      }
+                    }).catch(() => {});
+                    return updated;
+                  });
+                  return [...prev, newPos];
+                }
+                return prev;
+              }
+              return [newPos];
+            });
+          }
+        );
+        setGpsStatus('active');
+        addLog('Foreground GPS started');
+      } catch (e) {
+        setGpsStatus('error');
+        addLog('GPS error: ' + e.message);
+      }
     }
 
     try { await activateKeepAwakeAsync(); } catch (e) {}
