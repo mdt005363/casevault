@@ -457,6 +457,8 @@ const styles = {
     zIndex: mobile ? 200 : 100,
     transition: "left 0.25s ease",
     boxShadow: mobile && open ? "4px 0 30px rgba(0,0,0,0.8)" : "none",
+    paddingTop: mobile ? "env(safe-area-inset-top, 0px)" : 0,
+    paddingBottom: mobile ? "env(safe-area-inset-bottom, 0px)" : 0,
   }),
   overlay: {
     position: "fixed",
@@ -468,12 +470,14 @@ const styles = {
   mobileHeader: {
     position: "fixed",
     top: 0, left: 0, right: 0,
-    height: 56,
+    paddingTop: "env(safe-area-inset-top, 0px)",
     background: "linear-gradient(180deg, #0d0e14 0%, #0a0b0f 100%)",
     borderBottom: "1px solid rgba(0,255,0,0.1)",
     display: "flex",
     alignItems: "center",
     padding: "0 16px",
+    paddingTop: "calc(env(safe-area-inset-top, 0px) + 8px)",
+    paddingBottom: "8px",
     zIndex: 100,
     gap: 12,
   },
@@ -489,14 +493,16 @@ const styles = {
   bottomNav: {
     position: "fixed",
     bottom: 0, left: 0, right: 0,
-    height: 64,
     background: "linear-gradient(0deg, #0d0e14 0%, rgba(13,14,20,0.98) 100%)",
     borderTop: "1px solid rgba(0,255,0,0.1)",
     display: "flex",
     justifyContent: "space-around",
     alignItems: "center",
     zIndex: 100,
-    paddingBottom: "env(safe-area-inset-bottom, 0px)",
+    paddingTop: "8px",
+    paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 8px)",
+    paddingLeft: "env(safe-area-inset-left, 0px)",
+    paddingRight: "env(safe-area-inset-right, 0px)",
   },
   bottomNavItem: (active) => ({
     display: "flex",
@@ -547,7 +553,11 @@ const styles = {
   }),
   main: (mobile) => ({
     marginLeft: mobile ? 0 : 260,
-    padding: mobile ? "72px 16px 80px" : "24px 32px",
+    padding: mobile ? "0 16px 0" : "24px 32px",
+    paddingTop: mobile ? "calc(env(safe-area-inset-top, 0px) + 64px)" : "24px",
+    paddingBottom: mobile ? "calc(env(safe-area-inset-bottom, 0px) + 80px)" : "32px",
+    paddingLeft: mobile ? "calc(env(safe-area-inset-left, 0px) + 16px)" : "32px",
+    paddingRight: mobile ? "calc(env(safe-area-inset-right, 0px) + 16px)" : "32px",
     minHeight: "100vh",
     overflowY: "auto",
     WebkitOverflowScrolling: "touch",
@@ -850,6 +860,10 @@ function GPSTracker({ caseData, onMileageUpdate }) {
     }
   };
 
+  const [gapAlert, setGapAlert] = useState(null); // { minutes, lastPos }
+  const lastVisibleRef = useRef(Date.now());
+  const [gapMiles, setGapMiles] = useState("");
+
   // Recover session on visibility change (app comes back to foreground)
   useEffect(() => {
     const handleVisibility = () => {
@@ -858,13 +872,29 @@ function GPSTracker({ caseData, onMileageUpdate }) {
         const now = Date.now();
         setElapsed(Math.floor((now - startTimeRef.current) / 1000));
 
-        // Restart GPS if it was active and got killed
-        if (mode === "gps" && watchRef.current === null) {
-          startGPS();
+        // Detect GPS gap
+        if (mode === "gps") {
+          const gapMs = now - lastVisibleRef.current;
+          const gapMins = Math.floor(gapMs / 60000);
+
+          if (gapMins >= 1) {
+            // GPS was dead during this gap — notify user
+            const lastP = positions.length > 0 ? positions[positions.length - 1] : null;
+            setGapAlert({ minutes: gapMins, lastPos: lastP, gapStart: lastVisibleRef.current, gapEnd: now });
+          }
+
+          // Restart GPS
+          if (watchRef.current === null) {
+            startGPS();
+          }
           setGpsStatus("active");
         }
       }
+      if (document.visibilityState === "visible") {
+        lastVisibleRef.current = Date.now();
+      }
       if (document.visibilityState === "hidden" && tracking) {
+        lastVisibleRef.current = Date.now();
         saveSession(distance, positions);
       }
     };
@@ -1121,13 +1151,49 @@ function GPSTracker({ caseData, onMileageUpdate }) {
         </div>
       )}
 
+      {/* GPS Gap Alert — shown when user returns from background */}
+      {gapAlert && tracking && mode === "gps" && (
+        <div style={{ marginTop: 10, padding: "12px 14px", background: "rgba(255,153,0,0.06)", border: "1px solid rgba(255,153,0,0.2)", borderRadius: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <Icon name="alert" size={14} />
+            <span style={{ fontSize: 12, fontWeight: 600, color: "#f90" }}>GPS Gap Detected — {gapAlert.minutes} min</span>
+          </div>
+          <div style={{ fontSize: 11, color: "#888", marginBottom: 10, lineHeight: 1.4 }}>
+            GPS tracking paused while the app was in the background. Timer kept running. Enter the miles driven during this gap from your odometer, or skip to continue with GPS tracking only.
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input
+              type="number"
+              step="0.1"
+              style={{ ...styles.input, width: 100, textAlign: "center", fontFamily: "'JetBrains Mono'", fontWeight: 600 }}
+              value={gapMiles}
+              onChange={(e) => setGapMiles(e.target.value)}
+              placeholder="Miles"
+            />
+            <button style={{ ...styles.btn("primary"), fontSize: 11, padding: "8px 12px" }} onClick={() => {
+              const miles = parseFloat(gapMiles) || 0;
+              if (miles > 0) {
+                setDistance((prev) => prev + miles);
+              }
+              setGapAlert(null);
+              setGapMiles("");
+            }}>
+              {parseFloat(gapMiles) > 0 ? `Add ${gapMiles} mi` : "Skip"}
+            </button>
+            <button style={{ ...styles.btn(), fontSize: 11, padding: "8px 12px" }} onClick={() => { setGapAlert(null); setGapMiles(""); }}>
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Background notice */}
-      {tracking && (
+      {tracking && !gapAlert && (
         <div style={{ marginTop: 10, padding: "8px 12px", background: "rgba(74,170,255,0.04)", border: "1px solid rgba(74,170,255,0.1)", borderRadius: 6 }}>
           <div style={{ fontSize: 10, color: "#4af", lineHeight: 1.5 }}>
             {mode === "gps"
-              ? "Timer uses timestamps and survives app switching. GPS may pause when the screen locks — mileage will resume when you return. Keep CaseVault visible for best GPS accuracy."
-              : "Timer runs on timestamps — it keeps counting even if you switch apps or lock your phone. Come back anytime and elapsed time will be accurate."
+              ? "Timer keeps running when you switch apps. GPS pauses in the background — when you return, you can add the gap mileage from your odometer."
+              : "Timer runs on timestamps — keeps counting even if you switch apps or lock your phone."
             }
           </div>
         </div>
